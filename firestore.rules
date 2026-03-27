@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    function isValidStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+    function isValidOptionalBoolean(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is bool;
+    }
+
+    match /users/{userId} {
+      function isValidUser() {
+        return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+               isValidStringLength('uid', 1, 100) &&
+               isValidStringLength('email', 5, 200) &&
+               isValidOptionalString('displayName', 0, 100) &&
+               isValidOptionalString('photoURL', 0, 1000) &&
+               request.resource.data.createdAt is number;
+      }
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser() && uidUnchanged();
+      allow update: if isOwner(userId) && isValidUser() && uidNotModified() &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /projects/{projectId} {
+      function isValidProject() {
+        return hasOnlyAllowedFields(['uid', 'name', 'address', 'prompt', 'createdAt']) &&
+               isValidStringLength('uid', 1, 100) &&
+               isValidStringLength('name', 1, 100) &&
+               isValidOptionalString('address', 0, 500) &&
+               isValidOptionalString('prompt', 0, 5000) &&
+               request.resource.data.createdAt is number;
+      }
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidProject() && uidUnchanged();
+      allow update: if isDocOwner() && isValidProject() && uidNotModified() &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner();
+
+      match /images/{imageId} {
+        function isValidImage() {
+          return hasOnlyAllowedFields(['uid', 'projectId', 'originalThumbnail', 'processedThumbnail', 'finalThumbnail', 'status', 'analysis', 'resolution', 'processingStage', 'flagForRedo', 'stage2ndPass', 'wtf', 'createdAt']) &&
+                 isValidStringLength('uid', 1, 100) &&
+                 isValidStringLength('projectId', 1, 100) &&
+                 isValidStringLength('originalThumbnail', 1, 1000000) &&
+                 isValidOptionalString('processedThumbnail', 0, 1000000) &&
+                 isValidOptionalString('finalThumbnail', 0, 1000000) &&
+                 isValidStringLength('status', 1, 50) &&
+                 isValidOptionalString('analysis', 0, 10000) &&
+                 isValidOptionalString('resolution', 0, 50) &&
+                 isValidOptionalString('processingStage', 0, 50) &&
+                 isValidOptionalBoolean('flagForRedo') &&
+                 isValidOptionalBoolean('stage2ndPass') &&
+                 isValidOptionalBoolean('wtf') &&
+                 request.resource.data.createdAt is number;
+        }
+        function isImageOwner() {
+          return isAuthenticated() && request.auth.uid == resource.data.uid;
+        }
+        allow read: if isImageOwner();
+        allow create: if isAuthenticated() && isValidImage() && uidUnchanged();
+        allow update: if isImageOwner() && isValidImage() && uidNotModified() &&
+                      request.resource.data.createdAt == resource.data.createdAt &&
+                      request.resource.data.projectId == resource.data.projectId;
+        allow delete: if isImageOwner();
+      }
+    }
+  }
+}

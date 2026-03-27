@@ -1,0 +1,8 @@
+{
+  "name": "Real Estate Batch V4.0",
+  "description": "Batch exterior real estate beautification photo editor using Gemini Nano Banana 2 and Pro.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}

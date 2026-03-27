@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A batch of images",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "prompt": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "name", "createdAt"]
+    },
+    "ProjectImage": {
+      "title": "ProjectImage",
+      "description": "An image in a project",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "projectId": { "type": "string" },
+        "originalThumbnail": { "type": "string" },
+        "processedThumbnail": { "type": "string" },
+        "finalThumbnail": { "type": "string" },
+        "status": { "type": "string" },
+        "analysis": { "type": "string" },
+        "resolution": { "type": "string" },
+        "processingStage": { "type": "string" },
+        "flagForRedo": { "type": "boolean" },
+        "stage2ndPass": { "type": "boolean" },
+        "wtf": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "projectId", "originalThumbnail", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "User projects"
+    },
+    "projects/{projectId}/images/{imageId}": {
+      "schema": { "$ref": "#/entities/ProjectImage" },
+      "description": "Images in a project"
+    }
+  }
+}
