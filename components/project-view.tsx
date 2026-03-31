@@ -61,6 +61,7 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
 
   const handleFirestoreError = useCallback((error: any, operation: string, path: string) => {
@@ -131,6 +132,84 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
       console.error('Error generating prompt from address:', error);
     } finally {
       setIsGeneratingPrompt(false);
+    }
+  };
+
+  const analyzeAll = async () => {
+    if (images.length === 0) return;
+    setIsAnalyzingAll(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+      const allAnalyses: string[] = [];
+
+      for (const img of images) {
+        if (img.analysis) {
+          allAnalyses.push(img.analysis);
+          continue;
+        }
+
+        const imagePath = `projects/${projectId}/images/${img.id}`;
+        try {
+          await updateDoc(doc(db, imagePath), { status: 'analyzing' });
+          
+          const fullResBase64 = await getHighResImage(`orig_${img.id}`);
+          if (!fullResBase64) continue;
+          
+          const mimeType = fullResBase64.split(';')[0].split(':')[1];
+          const base64Data = fullResBase64.split(',')[1];
+
+          const scanResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-preview',
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    data: base64Data,
+                    mimeType: mimeType,
+                  },
+                },
+                {
+                  text: "Briefly identify the specific technical flaws in this real estate photo that need beautification (e.g., lighting, sky color, lawn health, clarity, shadows). Be concise and technical.",
+                },
+              ],
+            },
+          });
+
+          const analysis = scanResponse.text;
+          if (analysis) {
+            await updateDoc(doc(db, imagePath), { 
+              analysis,
+              status: 'pending'
+            });
+            allAnalyses.push(analysis);
+          }
+        } catch (error) {
+          console.error(`Error analyzing image ${img.id}:`, error);
+          await updateDoc(doc(db, imagePath), { status: 'pending' });
+        }
+      }
+
+      if (allAnalyses.length > 0) {
+        // Generate a summary prompt for the entire batch
+        const summaryResponse = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-preview',
+          contents: `Based on the following technical analyses of a batch of real estate photos, create a single, cohesive, and effective beautification prompt for an AI image editor. The prompt should address the common issues found across the batch while maintaining architectural integrity and realism.
+
+Analyses:
+${allAnalyses.join('\n\n')}
+
+Suggested Prompt:`,
+        });
+
+        if (summaryResponse.text) {
+          savePrompt(summaryResponse.text);
+        }
+      }
+    } catch (error) {
+      console.error('Error in analyzeAll:', error);
+    } finally {
+      setIsAnalyzingAll(false);
     }
   };
 
@@ -644,11 +723,20 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
                         alt="" 
                         referrerPolicy="no-referrer"
                       />
+
+                      {(img.status === 'processing' || img.status === 'analyzing') && (
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3">
+                          <Loader2 className="w-8 h-8 text-white animate-spin" />
+                          <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest">
+                            {img.status === 'analyzing' ? 'Analyzing...' : 'Processing...'}
+                          </span>
+                        </div>
+                      )}
                       
                       {/* Top Badges */}
                       <div className="absolute top-4 left-4 flex gap-2">
                         <div className="bg-[#2D3139]/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[10px] font-display font-bold text-white uppercase tracking-widest">
-                          {img.status === 'done' ? 'PROCESSED' : 'PENDING'}
+                          {img.status === 'done' ? 'PROCESSED' : img.status === 'analyzing' ? 'ANALYZING' : img.status === 'processing' ? 'PROCESSING' : 'PENDING'}
                         </div>
                         <div className="bg-[#2D3139]/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[10px] font-display font-bold text-[#4D94D1] uppercase tracking-widest">
                           {img.resolution || 'N/A'}
@@ -736,11 +824,22 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
               <div className="bg-[#3E434D] rounded-[32px] border border-white/5 p-8 shadow-2xl">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-[0.2em]">PROMPT SETTINGS</h3>
-                  {project?.address && (
-                    <button onClick={generatePromptFromAddress} className="text-[#D1604D] hover:text-[#E1705D] transition-colors">
-                      <Sparkles className="w-4 h-4" />
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={analyzeAll} 
+                      disabled={isAnalyzingAll || images.length === 0}
+                      className="text-[#D1604D] hover:text-[#E1705D] transition-colors disabled:opacity-50 flex items-center gap-2"
+                      title="Analyze all images to generate a batch prompt"
+                    >
+                      {isAnalyzingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                      <span className="text-[8px] font-display font-bold uppercase tracking-widest">ANALYZE ALL</span>
                     </button>
-                  )}
+                    {project?.address && (
+                      <button onClick={generatePromptFromAddress} className="text-[#D1604D] hover:text-[#E1705D] transition-colors">
+                        <Sparkles className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="relative">
