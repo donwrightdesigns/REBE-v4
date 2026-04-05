@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { Button } from './ui/button';
 import Image from 'next/image';
-import { ArrowLeft, UploadCloud, Play, CheckCircle2, Loader2, Mic, Image as ImageIcon, Sparkles, Trash2, Download, Camera } from 'lucide-react';
+import { ArrowLeft, UploadCloud, Play, CheckCircle2, Loader2, Mic, Image as ImageIcon, Sparkles, Trash2, Download, Camera, Settings, Video, X, ChevronDown } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { compressImage, fileToBase64, storeHighResImage, deleteHighResImage, getHighResImage, convertToJpg } from '@/lib/image-utils';
 import { GoogleGenAI } from '@google/genai';
@@ -22,6 +22,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 
 interface ProjectViewProps {
@@ -63,6 +64,13 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const [mode, setMode] = useState<'photo' | 'video'>('photo');
+  const [showStartupLogo, setShowStartupLogo] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowStartupLogo(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleFirestoreError = useCallback((error: any, operation: string, path: string) => {
     const errInfo = {
@@ -587,57 +595,110 @@ Suggested Prompt:`,
 
   return (
     <div className="min-h-screen bg-[#2D3139] flex flex-col font-sans">
+      {showStartupLogo && (
+        <div className="fixed inset-0 z-[100] bg-[#2D3139] flex flex-col items-center justify-center animate-in fade-in duration-500">
+          <div className="w-24 h-24 bg-[#D1604D] rounded-3xl flex items-center justify-center shadow-2xl mb-6 animate-bounce">
+            <Sparkles className="w-12 h-12 text-white" />
+          </div>
+          <h1 className="text-2xl font-display font-black text-white uppercase tracking-tighter">
+            WRIGHT CREATIVE
+          </h1>
+        </div>
+      )}
+
       <header className="bg-[#2D3139] border-b border-white/5 sticky top-0 z-20">
-        <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="w-10 h-10 bg-[#D1604D] rounded-xl flex items-center justify-center shadow-lg shadow-black/20">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-display font-bold tracking-tighter text-white uppercase leading-none">
-                WRIGHT CREATIVE&apos;S
+        <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-16 md:h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onBack}
+              className="w-10 h-10 rounded-xl bg-[#3E434D] flex items-center justify-center border border-white/5 hover:bg-[#4E535D] transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-white" />
+            </button>
+            <div className="hidden md:block">
+              <h1 className="text-sm font-display font-bold tracking-tighter text-white uppercase leading-none">
+                {project?.name || 'PROJECT'}
               </h1>
-              <p className="text-[10px] font-display font-medium tracking-[0.2em] text-[#A0A4AB] uppercase mt-1">
-                BATCH ENHANCEMENT ENGINE
+              <p className="text-[8px] font-display font-medium tracking-[0.2em] text-[#A0A4AB] uppercase mt-1">
+                {project?.address || 'BATCH ENHANCEMENT'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-8">
-            <div className="flex bg-[#3E434D] rounded-full p-1 border border-white/5">
-              <button className="px-6 py-1.5 rounded-full bg-[#D1604D] text-white text-[10px] font-display font-bold uppercase tracking-widest shadow-lg">
-                PHOTO
-              </button>
-              <button className="px-6 py-1.5 rounded-full text-[#A0A4AB] text-[10px] font-display font-bold uppercase tracking-widest hover:text-white transition-colors">
-                VIDEO
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-[#3E434D] rounded-xl px-4 py-2 border border-white/5">
-                <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest">3.1 FLASH (HQ)</span>
-                <div className="w-2 h-2 border-r border-b border-white/40 rotate-45 mb-1" />
-              </div>
-              <div className="flex items-center gap-2 bg-[#3E434D] rounded-xl px-4 py-2 border border-white/5">
-                <span className="text-[10px] font-display font-bold text-white uppercase tracking-widest">4K</span>
-                <div className="w-2 h-2 border-r border-b border-white/40 rotate-45 mb-1" />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <p className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">EST. COST</p>
-                <p className="text-xs font-display font-bold text-[#D1604D] uppercase tracking-widest">0 TOKENS</p>
-              </div>
-              <Button 
-                onClick={processBatch} 
-                disabled={isProcessing || !prompt.trim() || images.length === 0}
-                className="bg-[#3E434D] hover:bg-[#4E535D] text-[#A0A4AB] font-display font-bold uppercase tracking-widest px-8 py-6 rounded-xl border border-white/5 disabled:opacity-50"
+          <div className="flex items-center gap-2 md:gap-6">
+            <div className="flex bg-[#3E434D] rounded-xl p-1 border border-white/5">
+              <button 
+                onClick={() => setMode('photo')}
+                className={`p-2 rounded-lg transition-all ${mode === 'photo' ? 'bg-[#D1604D] text-white shadow-lg' : 'text-[#A0A4AB] hover:text-white'}`}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {targetQueue === 'pending' ? 'PROCESS BATCH' : 'PROCESS 2nd PASS'}
-              </Button>
+                <Camera className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => setMode('video')}
+                className={`p-2 rounded-lg transition-all ${mode === 'video' ? 'bg-[#D1604D] text-white shadow-lg' : 'text-[#A0A4AB] hover:text-white'}`}
+              >
+                <Video className="w-5 h-5" />
+              </button>
             </div>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <button className="w-10 h-10 rounded-xl bg-[#3E434D] flex items-center justify-center border border-white/5 hover:bg-[#4E535D] transition-colors text-[#A0A4AB] hover:text-white">
+                  <Settings className="w-5 h-5" />
+                </button>
+              </DialogTrigger>
+              <DialogContent className="bg-[#2D3139] border-white/10 text-white sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle className="font-display uppercase tracking-widest text-[#D1604D]">Batch Settings</DialogTitle>
+                  <DialogDescription className="text-[#A0A4AB]">Configure your AI processing engine.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-4">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">AI Model</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => setSelectedModel('nano2')}
+                        className={`px-4 py-3 rounded-xl border text-[10px] font-display font-bold uppercase tracking-widest transition-all ${selectedModel === 'nano2' ? 'bg-[#D1604D] border-[#D1604D] text-white' : 'bg-[#3E434D] border-white/5 text-[#A0A4AB]'}`}
+                      >
+                        3.1 Flash (2K)
+                      </button>
+                      <button 
+                        onClick={() => setSelectedModel('pro')}
+                        className={`px-4 py-3 rounded-xl border text-[10px] font-display font-bold uppercase tracking-widest transition-all ${selectedModel === 'pro' ? 'bg-[#D1604D] border-[#D1604D] text-white' : 'bg-[#3E434D] border-white/5 text-[#A0A4AB]'}`}
+                      >
+                        Pro (4K)
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">Target Queue</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => setTargetQueue('pending')}
+                        className={`px-4 py-3 rounded-xl border text-[10px] font-display font-bold uppercase tracking-widest transition-all ${targetQueue === 'pending' ? 'bg-[#D1604D] border-[#D1604D] text-white' : 'bg-[#3E434D] border-white/5 text-[#A0A4AB]'}`}
+                      >
+                        Pending
+                      </button>
+                      <button 
+                        onClick={() => setTargetQueue('2ndPass')}
+                        className={`px-4 py-3 rounded-xl border text-[10px] font-display font-bold uppercase tracking-widest transition-all ${targetQueue === '2ndPass' ? 'bg-[#D1604D] border-[#D1604D] text-white' : 'bg-[#3E434D] border-white/5 text-[#A0A4AB]'}`}
+                      >
+                        2nd Pass
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Button 
+              onClick={processBatch} 
+              disabled={isProcessing || !prompt.trim() || images.length === 0}
+              className="bg-[#D1604D] hover:bg-[#E1705D] text-white font-display font-bold uppercase tracking-widest px-4 md:px-8 h-10 md:h-12 rounded-xl shadow-lg shadow-[#D1604D]/20 disabled:opacity-50"
+            >
+              {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
+              <span className="hidden md:inline ml-2">{targetQueue === 'pending' ? 'PROCESS BATCH' : 'PROCESS 2nd PASS'}</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -672,16 +733,16 @@ Suggested Prompt:`,
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-12 gap-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
             {/* Left Column: Grid */}
-            <div className="col-span-9 space-y-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="col-span-1 lg:col-span-9 space-y-8">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                   <Button 
                     variant={filter === 'all' ? 'default' : 'outline'} 
                     size="sm" 
                     onClick={() => setFilter('all')}
-                    className={filter === 'all' ? 'bg-white text-black rounded-full px-6' : 'bg-[#3E434D] text-[#A0A4AB] border-white/5 rounded-full px-6'}
+                    className={filter === 'all' ? 'bg-white text-black rounded-full px-6 whitespace-nowrap' : 'bg-[#3E434D] text-[#A0A4AB] border-white/5 rounded-full px-6 whitespace-nowrap'}
                   >
                     ALL ({images.length})
                   </Button>
@@ -689,7 +750,7 @@ Suggested Prompt:`,
                     variant={filter === '2ndPass' ? 'default' : 'outline'} 
                     size="sm" 
                     onClick={() => setFilter('2ndPass')}
-                    className={filter === '2ndPass' ? 'bg-[#D1604D] text-white rounded-full px-6' : 'bg-[#3E434D] text-[#A0A4AB] border-white/5 rounded-full px-6'}
+                    className={filter === '2ndPass' ? 'bg-[#D1604D] text-white rounded-full px-6 whitespace-nowrap' : 'bg-[#3E434D] text-[#A0A4AB] border-white/5 rounded-full px-6 whitespace-nowrap'}
                   >
                     2ND PASS ({images.filter(i => i.stage2ndPass).length})
                   </Button>
@@ -700,7 +761,7 @@ Suggested Prompt:`,
                     size="sm" 
                     onClick={createBatchFromFiltered}
                     disabled={isCreatingBatch}
-                    className="bg-[#D1604D] hover:bg-[#E1705D] text-white rounded-full px-8"
+                    className="w-full md:w-auto bg-[#D1604D] hover:bg-[#E1705D] text-white rounded-full px-8"
                   >
                     {isCreatingBatch ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                     REPROCESS AS NEW BATCH
@@ -708,14 +769,14 @@ Suggested Prompt:`,
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredImages.map((img) => (
                   <div 
                     key={img.id} 
                     className="bg-[#3E434D] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl group cursor-pointer"
                     onClick={() => setSelectedImage(img)}
                   >
-                    <div className="relative aspect-[4/3] overflow-hidden">
+                    <div className="relative aspect-[16/9] sm:aspect-[4/3] overflow-hidden">
                       <Image 
                         src={img.processedThumbnail || img.originalThumbnail} 
                         fill
@@ -735,11 +796,8 @@ Suggested Prompt:`,
                       
                       {/* Top Badges */}
                       <div className="absolute top-4 left-4 flex gap-2">
-                        <div className="bg-[#2D3139]/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[10px] font-display font-bold text-white uppercase tracking-widest">
-                          {img.status === 'done' ? 'PROCESSED' : img.status === 'analyzing' ? 'ANALYZING' : img.status === 'processing' ? 'PROCESSING' : 'PENDING'}
-                        </div>
-                        <div className="bg-[#2D3139]/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[10px] font-display font-bold text-[#4D94D1] uppercase tracking-widest">
-                          {img.resolution || 'N/A'}
+                        <div className={`backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[10px] font-display font-bold text-white uppercase tracking-widest ${img.status === 'done' || img.status === 'final' ? 'bg-green-500/80' : 'bg-[#2D3139]/80'}`}>
+                          {img.status === 'done' || img.status === 'final' ? 'READY' : img.status === 'analyzing' ? 'ANALYZING' : img.status === 'processing' ? 'PROCESSING' : 'PENDING'}
                         </div>
                       </div>
 
@@ -754,41 +812,31 @@ Suggested Prompt:`,
                       {img.analysis && (
                         <div className="absolute bottom-4 left-4 right-4 bg-[#2D3139]/90 backdrop-blur-xl p-4 rounded-2xl border border-[#D1604D]/30 shadow-2xl">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-display font-bold text-[#D1604D] uppercase tracking-widest">AI SUGGESTION:</span>
-                            <button className="bg-[#D1604D] text-white text-[8px] font-display font-bold px-3 py-1 rounded-md uppercase tracking-widest">APPLY</button>
+                            <span className="text-[10px] font-display font-bold text-[#D1604D] uppercase tracking-widest">AI SCAN:</span>
+                            <div className="w-2 h-2 bg-[#D1604D] rounded-full animate-pulse" />
                           </div>
-                          <p className="text-xs font-display italic text-[#A0A4AB] leading-relaxed">
-                            &quot;{img.analysis.slice(0, 80)}...&quot;
+                          <p className="text-xs font-display italic text-[#A0A4AB] leading-relaxed line-clamp-2">
+                            &quot;{img.analysis}&quot;
                           </p>
                         </div>
                       )}
                     </div>
 
-                    <div className="p-6 space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-display font-bold text-[#A0A4AB] uppercase tracking-widest mb-1">DWD_{img.id.slice(0,4)}.JPG</p>
-                          <div className="flex bg-[#2D3139] rounded-lg p-1 border border-white/5">
-                            <button className="px-4 py-1 rounded-md bg-[#D1604D] text-white text-[8px] font-display font-bold uppercase tracking-widest">PHOTO</button>
-                            <button className="px-4 py-1 rounded-md text-[#A0A4AB] text-[8px] font-display font-bold uppercase tracking-widest">VIDEO</button>
-                          </div>
+                    <div className="p-5 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-[#2D3139] rounded-lg flex items-center justify-center border border-white/5">
+                          {mode === 'photo' ? <Camera className="w-4 h-4 text-[#A0A4AB]" /> : <Video className="w-4 h-4 text-[#A0A4AB]" />}
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">EST. 20</p>
-                          <p className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">TOKENS</p>
+                        <div>
+                          <p className="text-[10px] font-display font-bold text-white uppercase tracking-widest">DWD_{img.id.slice(0,4)}</p>
+                          <p className="text-[8px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest">{img.resolution || 'AUTO'}</p>
                         </div>
                       </div>
-
-                      <div>
-                        <p className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-widest mb-3">CATEGORY</p>
-                        <div className="relative">
-                          <select className="w-full bg-[#2D3139] border border-white/10 rounded-xl px-4 py-3 text-xs font-display font-bold text-white appearance-none focus:outline-none focus:border-[#D1604D]/50">
-                            <option>Interior</option>
-                            <option>Exterior</option>
-                            <option>Aerial</option>
-                          </select>
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 border-r border-b border-white/40 rotate-45" />
-                        </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {img.flagForRedo && <div className="w-2 h-2 bg-yellow-500 rounded-full" />}
+                        {img.stage2ndPass && <div className="w-2 h-2 bg-[#D1604D] rounded-full" />}
+                        {img.wtf && <div className="w-2 h-2 bg-red-500 rounded-full" />}
                       </div>
                     </div>
                   </div>
@@ -797,7 +845,7 @@ Suggested Prompt:`,
             </div>
 
             {/* Right Column: Actions */}
-            <div className="col-span-3 space-y-6">
+            <div className="col-span-1 lg:col-span-3 space-y-6">
               <div className="bg-[#3E434D] rounded-[32px] border border-white/5 p-8 shadow-2xl">
                 <h3 className="text-[10px] font-display font-bold text-[#A0A4AB] uppercase tracking-[0.2em] mb-8">BATCH ACTIONS</h3>
                 
