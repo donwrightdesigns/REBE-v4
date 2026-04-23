@@ -92,5 +92,20 @@ service cloud.firestore {
         allow delete: if isImageOwner();
       }
     }
+
+    match /saved_prompts/{promptId} {
+      function isValidSavedPrompt() {
+        return hasOnlyAllowedFields(['uid', 'name', 'prompt', 'createdAt']) &&
+               isValidStringLength('uid', 1, 100) &&
+               isValidStringLength('name', 1, 100) &&
+               isValidStringLength('prompt', 1, 5000) &&
+               request.resource.data.createdAt is number;
+      }
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidSavedPrompt() && uidUnchanged();
+      allow update: if isDocOwner() && isValidSavedPrompt() && uidNotModified() &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner();
+    }
   }
 }

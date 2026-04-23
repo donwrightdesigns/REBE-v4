@@ -46,6 +46,18 @@
         "createdAt": { "type": "number" }
       },
       "required": ["uid", "projectId", "originalThumbnail", "status", "createdAt"]
+    },
+    "SavedPrompt": {
+      "title": "SavedPrompt",
+      "description": "A saved AI prompt",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "prompt": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "name", "prompt", "createdAt"]
     }
   },
   "firestore": {
@@ -60,6 +72,10 @@
     "projects/{projectId}/images/{imageId}": {
       "schema": { "$ref": "#/entities/ProjectImage" },
       "description": "Images in a project"
+    },
+    "saved_prompts/{promptId}": {
+      "schema": { "$ref": "#/entities/SavedPrompt" },
+      "description": "User saved prompts"
     }
   }
 }

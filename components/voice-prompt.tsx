@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Mic, Square, Loader2, Volume2 } from 'lucide-react';
-import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, Type, Session } from '@google/genai';
 
 interface VoicePromptProps {
   onPromptGenerated: (prompt: string) => void;
@@ -14,7 +14,7 @@ export default function VoicePrompt({ onPromptGenerated }: VoicePromptProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState('');
   
-  const sessionRef = useRef<any>(null);
+  const sessionRef = useRef<Promise<Session> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -53,7 +53,7 @@ export default function VoicePrompt({ onPromptGenerated }: VoicePromptProps) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
       
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({ sampleRate: 16000 });
       audioContextRef.current = audioCtx;
       
       const source = audioCtx.createMediaStreamSource(stream);
@@ -66,7 +66,7 @@ export default function VoicePrompt({ onPromptGenerated }: VoicePromptProps) {
       processor.connect(audioCtx.destination);
       
       const sessionPromise = ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -101,56 +101,57 @@ export default function VoicePrompt({ onPromptGenerated }: VoicePromptProps) {
               
               const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
               
-              sessionPromise.then((session) => {
+              sessionPromise.then((session: Session) => {
                 session.sendRealtimeInput({
                   media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                 });
               });
             };
           },
-          onmessage: async (message: LiveServerMessage) => {
-            // Handle audio output
-            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio) {
-              const binaryString = atob(base64Audio);
-              const pcm16 = new Int16Array(binaryString.length / 2);
-              for (let i = 0; i < pcm16.length; i++) {
-                pcm16[i] = binaryString.charCodeAt(i * 2) | (binaryString.charCodeAt(i * 2 + 1) << 8);
-              }
-              const float32 = new Float32Array(pcm16.length);
-              for (let i = 0; i < pcm16.length; i++) {
-                float32[i] = pcm16[i] / 0x7FFF;
+            onmessage: async (message: LiveServerMessage) => {
+              // Handle audio output
+              const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+              if (base64Audio) {
+                const binaryString = atob(base64Audio);
+                const pcm16 = new Int16Array(binaryString.length / 2);
+                for (let i = 0; i < pcm16.length; i++) {
+                  pcm16[i] = binaryString.charCodeAt(i * 2) | (binaryString.charCodeAt(i * 2 + 1) << 8);
+                }
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                  float32[i] = pcm16[i] / 0x7FFF;
+                }
+                
+                audioQueueRef.current.push(float32);
+                playNextAudio();
               }
               
-              audioQueueRef.current.push(float32);
-              playNextAudio();
-            }
-            
-            // Handle tool calls
-            const functionCalls = message.toolCall?.functionCalls;
-            if (functionCalls) {
-              for (const call of functionCalls) {
-                if (call.name === 'setPrompt' && call.args) {
-                  const promptArg = (call.args as any).prompt;
-                  if (promptArg) {
-                    onPromptGenerated(promptArg);
-                    setTranscript(`Prompt set: ${promptArg}`);
-                    
-                    // Send response back
-                    sessionPromise.then(session => {
-                      session.sendToolResponse({
-                        functionResponses: [{
-                          id: call.id,
-                          name: call.name,
-                          response: { result: "Success" }
-                        }]
+              // Handle tool calls
+              const functionCalls = message.toolCall?.functionCalls;
+              if (functionCalls) {
+                for (const call of functionCalls) {
+                  if (call.name === 'setPrompt' && call.args) {
+                    const args = call.args as { prompt?: string };
+                    const promptArg = args.prompt;
+                    if (promptArg) {
+                      onPromptGenerated(promptArg);
+                      setTranscript(`Prompt set: ${promptArg}`);
+                      
+                      // Send response back
+                      sessionPromise.then((session: Session) => {
+                        session.sendToolResponse({
+                          functionResponses: [{
+                            id: call.id,
+                            name: call.name,
+                            response: { result: "Success" }
+                          }]
+                        });
                       });
-                    });
+                    }
                   }
                 }
               }
-            }
-          },
+            },
           onclose: () => {
             stopRecording();
           },
@@ -190,7 +191,7 @@ export default function VoicePrompt({ onPromptGenerated }: VoicePromptProps) {
       audioContextRef.current = null;
     }
     if (sessionRef.current) {
-      sessionRef.current.then((session: any) => session.close());
+      sessionRef.current.then((session: Session) => session.close());
       sessionRef.current = null;
     }
     audioQueueRef.current = [];

@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './auth-provider';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, getDocs, doc, setDoc, deleteDoc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Button } from './ui/button';
 import Image from 'next/image';
-import { Plus, LogOut, FolderOpen, Clock, CheckSquare, Square, Merge, Edit2, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { Plus, LogOut, FolderOpen, Clock, CheckSquare, Merge, Edit2, Sparkles, Image as ImageIcon } from 'lucide-react';
 import ProjectView from './project-view';
 import {
   Dialog,
@@ -47,14 +47,14 @@ function ProjectThumbnailGrid({ projectId, uid }: { projectId: string, uid: stri
 
   if (thumbnails.length === 0) {
     return (
-      <div className="h-32 bg-[#2D3139] rounded-lg mb-4 flex items-center justify-center text-[#A0A4AB]">
+      <div className="h-32 bg-zinc-800 rounded-lg mb-4 flex items-center justify-center text-zinc-500">
         <ImageIcon className="w-8 h-8 opacity-20" />
       </div>
     );
   }
 
   return (
-    <div className="h-32 grid grid-cols-2 gap-1 mb-4 rounded-lg overflow-hidden bg-[#2D3139]">
+    <div className="h-32 grid grid-cols-2 gap-1 mb-4 rounded-lg overflow-hidden bg-zinc-800">
       {thumbnails.map((url, i) => {
         let spanClass = '';
         if (thumbnails.length === 1) spanClass = 'col-span-2 row-span-2';
@@ -83,12 +83,6 @@ export default function Dashboard() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newAddress, setNewAddress] = useState('');
-  const [showStartupLogo, setShowStartupLogo] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowStartupLogo(false), 2000);
-    return () => clearTimeout(timer);
-  }, []);
   
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
@@ -96,7 +90,7 @@ export default function Dashboard() {
   const [mergeAddress, setMergeAddress] = useState('');
   const [isMerging, setIsMerging] = useState(false);
 
-  const handleFirestoreError = useCallback((error: any, operation: string, path: string) => {
+  const handleFirestoreError = useCallback((error: unknown, operation: string, path: string) => {
     const errInfo = {
       error: error instanceof Error ? error.message : String(error),
       authInfo: {
@@ -231,8 +225,9 @@ export default function Dashboard() {
       setSelectedProjects(new Set());
       setIsMergeDialogOpen(false);
       setMergeAddress('');
-    } catch (error: any) {
-      console.error('Error merging projects:', error.message || error);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Error merging projects:', message);
     } finally {
       setIsMerging(false);
     }
@@ -259,8 +254,9 @@ export default function Dashboard() {
       setIsRenameDialogOpen(false);
       setProjectToRename(null);
       setRenameAddress('');
-    } catch (error: any) {
-      console.error('Error renaming project:', error.message || error);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Error renaming project:', message);
     } finally {
       setIsRenaming(false);
     }
@@ -272,36 +268,25 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#2D3139] flex flex-col font-sans">
-      {showStartupLogo && (
-        <div className="fixed inset-0 z-[100] bg-[#2D3139] flex flex-col items-center justify-center animate-in fade-in duration-500">
-          <div className="w-24 h-24 bg-[#D1604D] rounded-3xl flex items-center justify-center shadow-2xl mb-6 animate-bounce">
-            <Sparkles className="w-12 h-12 text-white" />
-          </div>
-          <h1 className="text-2xl font-display font-black text-white uppercase tracking-tighter">
-            WRIGHT CREATIVE
-          </h1>
-        </div>
-      )}
-
       <header className="bg-[#2D3139] border-b border-white/5 sticky top-0 z-20">
-        <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-16 md:h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-6">
             <div className="w-10 h-10 bg-[#D1604D] rounded-xl flex items-center justify-center shadow-lg shadow-black/20">
               <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-sm font-display font-bold tracking-tighter text-white uppercase leading-none">
-                WRIGHT CREATIVE
+            <div>
+              <h1 className="text-lg font-display font-bold tracking-tighter text-white uppercase leading-none">
+                WRIGHT CREATIVE&apos;S
               </h1>
-              <p className="text-[8px] font-display font-medium tracking-[0.2em] text-[#A0A4AB] uppercase mt-1">
+              <p className="text-[10px] font-display font-medium tracking-[0.2em] text-[#A0A4AB] uppercase mt-1">
                 BATCH ENHANCEMENT ENGINE
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 md:gap-6">
-            <div className="flex items-center gap-3">
-              <div className="relative w-8 h-8 md:w-10 md:h-10 rounded-xl overflow-hidden bg-[#3E434D] border border-white/5">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3 text-sm text-[#A0A4AB]">
+              <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-[#3E434D] border border-white/5">
                 <Image 
                   src={user?.photoURL || 'https://picsum.photos/seed/user/200/200'} 
                   fill
@@ -310,12 +295,12 @@ export default function Dashboard() {
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <div className="hidden md:block">
+              <div className="hidden sm:block">
                 <p className="text-[10px] font-display font-bold text-white uppercase tracking-widest leading-none mb-1">{user?.displayName}</p>
                 <p className="text-[8px] font-display text-[#A0A4AB] uppercase tracking-widest leading-none">PRO ACCOUNT</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={logOut} title="Sign out" className="text-[#A0A4AB] hover:text-white hover:bg-[#3E434D] rounded-xl">
+            <Button variant="ghost" size="icon" onClick={logOut} title="Sign out" className="text-white hover:text-white hover:bg-[#3E434D] rounded-xl">
               <LogOut className="w-5 h-5" />
             </Button>
           </div>
@@ -330,7 +315,7 @@ export default function Dashboard() {
               <Button 
                 variant={isSelectionMode ? "secondary" : "outline"}
                 size="sm"
-                className={isSelectionMode ? "bg-[#D1604D] text-white rounded-full px-6" : "bg-[#3E434D] text-[#A0A4AB] border-white/5 rounded-full px-6"}
+                className={isSelectionMode ? "bg-[#D1604D] text-white rounded-full px-6" : "bg-[#3E434D] text-white border-white/5 rounded-full px-6"}
                 onClick={() => {
                   setIsSelectionMode(!isSelectionMode);
                   if (isSelectionMode) setSelectedProjects(new Set());

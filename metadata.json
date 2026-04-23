@@ -1,6 +1,6 @@
 {
-  "name": "Real Estate Batch V4.0",
-  "description": "Batch exterior real estate beautification photo editor using Gemini Nano Banana 2 and Pro.",
+  "name": "Beautify Real Estate Batch Editor",
+  "description": "Professional AI-powered batch processor for beautifying exterior real estate photos with lighting, sky, and landscaping enhancements.",
   "requestFramePermissions": [
     "microphone",
     "camera"

@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { Camera, X, Check, RotateCcw, Sparkles, Loader2 } from 'lucide-react';
+import { X, Check, RotateCcw, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface CameraCaptureProps {
@@ -89,8 +89,6 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
   const removeImage = (index: number) => {
     setCapturedImages(prev => prev.filter((_, i) => i !== index));
   };
-
-  const isComplete = isTripleShot ? capturedImages.length >= 3 : capturedImages.length >= 1;
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">

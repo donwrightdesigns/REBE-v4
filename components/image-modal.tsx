@@ -5,14 +5,38 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, ScanSearch, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react';
-import { getHighResImage, storeHighResImage, compressImage, deleteHighResImage, convertToJpg } from '@/lib/image-utils';
+import { getHighResImage, storeHighResImage, compressImage, deleteHighResImage, convertToJpg, applyOverlayToDataUrl, downloadUrl } from '@/lib/image-utils';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { GoogleGenAI } from '@google/genai';
-import ReactMarkdown from 'react-markdown';
+import Markdown from 'react-markdown';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Layers } from 'lucide-react';
+
+interface ProjectImage {
+  id: string;
+  uid: string;
+  projectId: string;
+  originalThumbnail: string;
+  processedThumbnail?: string;
+  finalThumbnail?: string;
+  status: 'pending' | 'analyzing' | 'processing' | 'done' | 'error' | 'final';
+  analysis?: string;
+  resolution?: string;
+  processingStage?: string;
+  flagForRedo?: boolean;
+  stage2ndPass?: boolean;
+  wtf?: boolean;
+  createdAt: number;
+}
 
 interface ImageModalProps {
-  image: any;
+  image: ProjectImage;
   projectId: string;
   onClose: () => void;
   onNext?: () => void;
@@ -28,7 +52,9 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
   const [isGeneratingPro, setIsGeneratingPro] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string>(image?.analysis || '');
+  const [showAnalysis, setShowAnalysis] = useState(true);
   const [viewMode, setViewMode] = useState<'original' | 'processed' | 'final' | 'analysis'>('processed');
+  const [isApplyingOverlay, setIsApplyingOverlay] = useState(false);
   
   // Review Flags
   const [flagForRedo, setFlagForRedo] = useState<boolean>(image?.flagForRedo || false);
@@ -105,7 +131,6 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
   const analyzeImage = async () => {
     if (!originalUrl) return;
     setIsAnalyzing(true);
-    setViewMode('analysis');
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
@@ -124,7 +149,7 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
               },
             },
             {
-              text: "Analyze this real estate photo. Describe the architectural style, time of day, season, weather, and current condition of the landscaping and exterior. Suggest 3 specific beautification prompts that would improve this image.",
+              text: "Analyze this real estate photo like a professional photo editor. Return a list of 'Lightroom Classic' style adjustments in bullet points (e.g., Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Saturation, Vibrance, Clarity). Then, provide a single 'Suggested Beautification Prompt' that summarizes these changes for an AI image generator. Be concise.",
             },
           ],
         }
@@ -234,13 +259,44 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
 
   const handleDownload = async () => {
     if (!currentImageUrl) return;
-    const jpgBase64 = await convertToJpg(currentImageUrl);
-    const a = document.createElement('a');
-    a.href = jpgBase64;
-    a.download = `property_${image.id}_${viewMode}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const jpgDataUrl = await convertToJpg(currentImageUrl);
+    await downloadUrl(jpgDataUrl, `property_${image.id}_${viewMode}.jpg`);
+  };
+
+  const applyOverlay = async (type: string) => {
+    if (!currentImageUrl) return;
+    setIsApplyingOverlay(true);
+    try {
+      const overlaidDataUrl = await applyOverlayToDataUrl(currentImageUrl, type);
+      
+      // We can either just download it, or save it as the final version
+      // Let's save it as the final version if it's the final/processed image
+      if (viewMode === 'final' || viewMode === 'processed') {
+        await storeHighResImage(`final_${image.id}`, overlaidDataUrl);
+        setFinalUrl(overlaidDataUrl);
+        setViewMode('final');
+        
+        // Update thumbnail
+        const res = await fetch(overlaidDataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], 'final_with_overlay.jpg', { type: 'image/jpeg' });
+        const finalThumbnail = await compressImage(file, 400, 400, 0.6);
+
+        await updateDoc(doc(db, 'projects', projectId, 'images', image.id), {
+          finalThumbnail,
+          status: 'final',
+          processingStage: 'overlay_applied'
+        });
+      } else {
+        // If it's original, maybe just download it? 
+        // For now, let's treat it as a "save to final" if user wants an overlay.
+        await downloadUrl(overlaidDataUrl, `property_${image.id}_overlay.jpg`);
+      }
+    } catch (error) {
+      console.error('Error applying overlay:', error);
+    } finally {
+      setIsApplyingOverlay(false);
+    }
   };
 
   const [isDeleting, setIsDeleting] = useState(false);
@@ -267,41 +323,35 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
             <div className="flex bg-zinc-800 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('original')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'original' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-md transition-colors ${viewMode === 'original' ? 'bg-zinc-700 text-white' : 'text-zinc-300 hover:text-zinc-100'}`}
               >
-                Original
-              </button>
-              <button
-                onClick={() => setViewMode('analysis')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'analysis' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-              >
-                Analysis
+                ORIGINAL
               </button>
               <button
                 onClick={() => setViewMode('processed')}
                 disabled={!processedUrl}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'processed' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'} disabled:opacity-50`}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-md transition-colors ${viewMode === 'processed' ? 'bg-zinc-700 text-white' : 'text-zinc-300 hover:text-zinc-100'} disabled:opacity-50`}
               >
-                Nano Banana 2
+                NANO 2
               </button>
               <button
                 onClick={() => setViewMode('final')}
                 disabled={!finalUrl}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'final' ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:text-zinc-200'} disabled:opacity-50`}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-md transition-colors ${viewMode === 'final' ? 'bg-indigo-600 text-white' : 'text-zinc-300 hover:text-zinc-100'} disabled:opacity-50`}
               >
-                Pro Version
+                PRO
               </button>
             </div>
             
-            {viewMode === 'original' && !analysis && (
+            {viewMode === 'original' && (
               <Button 
                 onClick={analyzeImage} 
                 disabled={isAnalyzing}
                 variant="outline"
-                className="bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700 hover:text-white ml-4"
+                className="bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700 hover:text-white ml-4 text-[10px] font-bold uppercase tracking-widest"
               >
                 {isAnalyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanSearch className="w-4 h-4 mr-2" />}
-                Analyze Image
+                ANALYZE
               </Button>
             )}
 
@@ -309,11 +359,38 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
               <Button 
                 onClick={generateProVersion} 
                 disabled={isGeneratingPro}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white ml-4"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white ml-2 text-[10px] font-bold uppercase tracking-widest"
               >
                 {isGeneratingPro ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Generate Pro Version
+                GENERATE PRO
               </Button>
+            )}
+
+            {processedUrl && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    disabled={isApplyingOverlay}
+                    className="bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700 hover:text-white ml-2" 
+                    title="Apply Overlay"
+                  >
+                    {isApplyingOverlay ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                  <DropdownMenuItem onClick={() => applyOverlay('digitally_enhanced')} className="hover:bg-zinc-800 cursor-pointer">
+                    Digitally Enhanced
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyOverlay('virtually_staged')} className="hover:bg-zinc-800 cursor-pointer">
+                    Virtually Staged
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyOverlay('digitally_decluttered')} className="hover:bg-zinc-800 cursor-pointer">
+                    Digitally Decluttered
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <Button 
@@ -339,6 +416,30 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
         </DialogHeader>
         
         <div className="flex-1 relative bg-zinc-950 flex items-center justify-center p-4 overflow-hidden group">
+          {analysis && viewMode === 'original' && showAnalysis && (
+            <div className="absolute top-4 left-4 right-4 z-20 bg-black/80 backdrop-blur-md p-6 rounded-xl border border-white/10 max-h-[40%] overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">AI EDITING ANALYSIS (LIGHTROOM STYLE)</p>
+                <button 
+                  onClick={() => setShowAnalysis(false)}
+                  className="text-zinc-500 hover:text-white transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="text-sm text-zinc-200 leading-relaxed prose prose-invert prose-sm max-w-none">
+                <Markdown>{analysis}</Markdown>
+              </div>
+            </div>
+          )}
+          {!showAnalysis && analysis && viewMode === 'original' && (
+            <button 
+              onClick={() => setShowAnalysis(true)}
+              className="absolute top-4 right-4 z-20 bg-black/60 backdrop-blur-md p-2 rounded-lg border border-white/10 text-xs font-bold text-indigo-400 uppercase tracking-widest hover:bg-black/80 transition-all"
+            >
+              SHOW ANALYSIS
+            </button>
+          )}
           {hasPrev && (
             <Button 
               variant="ghost" 
@@ -374,7 +475,7 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
                   </div>
                 ) : analysis ? (
                   <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown>{analysis}</ReactMarkdown>
+                    <Markdown>{analysis}</Markdown>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
@@ -416,25 +517,25 @@ export default function ImageModal({ image, projectId, onClose, onNext, onPrev, 
         </div>
         
         <DialogFooter className="p-4 border-t border-zinc-800 bg-zinc-900 flex flex-row items-center justify-start sm:justify-start gap-6">
-          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white transition-colors">
+          <label className="flex items-center gap-2 text-[10px] font-bold text-zinc-300 cursor-pointer hover:text-white transition-colors uppercase tracking-widest">
             <input 
               type="checkbox" 
               checked={flagForRedo} 
               onChange={() => toggleFlag('flagForRedo', flagForRedo)}
               className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-indigo-600 focus:ring-offset-zinc-900"
             />
-            Flag for REDO
+            FLAG FOR REDO
           </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white transition-colors">
+          <label className="flex items-center gap-2 text-[10px] font-bold text-zinc-300 cursor-pointer hover:text-white transition-colors uppercase tracking-widest">
             <input 
               type="checkbox" 
               checked={stage2ndPass} 
               onChange={() => toggleFlag('stage2ndPass', stage2ndPass)}
               className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-indigo-600 focus:ring-offset-zinc-900"
             />
-            Stage 2nd pass
+            STAGE 2ND PASS
           </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white transition-colors">
+          <label className="flex items-center gap-2 text-[10px] font-bold text-zinc-300 cursor-pointer hover:text-white transition-colors uppercase tracking-widest">
             <input 
               type="checkbox" 
               checked={wtf} 
