@@ -1,19 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { LogIn, Image as ImageIcon, Key } from 'lucide-react';
 
-const Dashboard = dynamic(() => import('@/components/Dashboard'), {
-  ssr: false,
-  loading: () => (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-    </div>
-  )
-});
+import Dashboard from '@/components/Dashboard';
 
 export default function HomeClient() {
   const { user, loading, signIn } = useAuth();
